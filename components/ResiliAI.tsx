@@ -68,7 +68,7 @@ function GlassPanel({ className, children, ...rest }) {
   return (
     <div
       className={cx(
-        "rounded-2xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]",
+        "interactive-panel rounded-2xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]",
         className
       )}
       {...rest}
@@ -135,7 +135,7 @@ function RiskGauge({ value, size = 168, level }) {
         <span className="text-4xl font-semibold tabular-nums text-white/95" style={{ fontFamily: "Manrope, sans-serif" }}>
           <CountUp value={pct} decimals={0} suffix="%" />
         </span>
-        <span className="text-[11px] uppercase tracking-[0.14em] text-white/40 mt-1">Flood risk</span>
+        <span className="text-[11px] uppercase tracking-[0.14em] text-white/40 mt-1">Rainfall risk</span>
       </div>
     </div>
   );
@@ -156,53 +156,161 @@ function LiveDot() {
 /* ---------------------------------------------------------------------
    INTRO
 --------------------------------------------------------------------- */
+function ParticleField() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas.getContext("2d");
+    const particles = Array.from({ length: 520 }, (_, index) => ({
+      x: Math.random(),
+      y: Math.random(),
+      size: 0.45 + Math.random() * 1.2,
+      alpha: 0.35 + Math.random() * 0.65,
+      quadrant: index % 4,
+      spread: Math.random(),
+      depth: Math.random(),
+    }));
+    let frameId;
+    const startedAt = performance.now();
+
+    const resize = () => {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = window.innerWidth * ratio;
+      canvas.height = window.innerHeight * ratio;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    };
+
+    const draw = (now) => {
+      const elapsed = (now - startedAt) / 1000;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const size = Math.min(width * 0.72, height * 0.7, 760);
+      const left = (width - size) / 2;
+      const top = (height - size) / 2 - size * 0.06;
+      context.clearRect(0, 0, width, height);
+
+      particles.forEach((particle) => {
+        const side = particle.quadrant % 2 === 0 ? -1 : 1;
+        const vertical = particle.quadrant < 2 ? -1 : 1;
+        const localX = 0.07 + particle.spread * 0.4;
+        const localY = 0.07 + ((particle.spread * 1.73 + particle.depth) % 1) * 0.4;
+        const formationX = left + size * (side < 0 ? localX : 1 - localX);
+        const formationY = top + size * (vertical < 0 ? localY : 1 - localY);
+        const finalX = left + size * (side < 0 ? localX * 0.94 : 1 - localX * 0.94);
+        const finalY = top + size * (vertical < 0 ? localY * 0.94 : 1 - localY * 0.94);
+        const gather = Math.min(1, Math.max(0, (elapsed - 0.05) / 1.05));
+        const assemble = Math.min(1, Math.max(0, (elapsed - 1.1) / 0.95));
+        const easedGather = 1 - Math.pow(1 - gather, 3);
+        const easedAssemble = 1 - Math.pow(1 - assemble, 3);
+        const startX = particle.x * width;
+        const startY = particle.y * height;
+        const formationCenterX = width / 2 + (formationX - width / 2) * 0.78;
+        const formationCenterY = height / 2 + (formationY - height / 2) * 0.78;
+        const gatheredX = startX + (formationCenterX - startX) * easedGather;
+        const gatheredY = startY + (formationCenterY - startY) * easedGather;
+        const x = gatheredX + (finalX - gatheredX) * easedAssemble;
+        const y = gatheredY + (finalY - gatheredY) * easedAssemble;
+        const trail = Math.min(1, Math.max(0, (elapsed - 1.1) / 0.65));
+        const opacity = particle.alpha * (elapsed > 2.12 ? Math.max(0, 1 - (elapsed - 2.12) / 0.5) : Math.min(1, elapsed / 0.25));
+
+        context.fillStyle = `rgba(245,250,255,${opacity})`;
+        context.beginPath();
+        context.arc(x, y, particle.size, 0, Math.PI * 2);
+        context.fill();
+        if (trail > 0 && trail < 1) {
+          context.strokeStyle = `rgba(245,250,255,${opacity * 0.18})`;
+          context.lineWidth = particle.size * 0.7;
+          context.beginPath();
+          context.moveTo(gatheredX, gatheredY);
+          context.lineTo(x, y);
+          context.stroke();
+        }
+      });
+
+      frameId = requestAnimationFrame(draw);
+    };
+
+    resize();
+    window.addEventListener("resize", resize);
+    frameId = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-20" aria-hidden="true" />;
+}
+
 function Intro({ onDone }) {
   useEffect(() => {
-    const t = setTimeout(onDone, 1800);
+    const t = setTimeout(onDone, 3000);
     return () => clearTimeout(t);
   }, [onDone]);
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#060810] overflow-hidden"
-      exit={{ opacity: 0, transition: { duration: 0.6 } }}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-black"
+      exit={{ opacity: 0, transition: { duration: 0.32, ease: "easeInOut" } }}
     >
-      <div className="absolute inset-0 opacity-[0.35]" style={{
-        backgroundImage: "radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)",
-        backgroundSize: "34px 34px",
-      }} />
-      {[...Array(14)].map((_, i) => (
-        <motion.span
-          key={i}
-          className="absolute w-1 h-1 rounded-full bg-sky-300/50"
-          style={{ left: `${(i * 37) % 100}%`, top: `${(i * 53) % 100}%` }}
-          animate={{ opacity: [0.1, 0.6, 0.1], y: [0, -14, 0] }}
-          transition={{ duration: 5 + (i % 4), repeat: Infinity, delay: i * 0.2 }}
-        />
-      ))}
+      <ParticleField />
       <motion.div
-        initial={{ opacity: 0, scale: 0.92 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="relative flex flex-col items-center"
+        initial={{ opacity: 1 }}
+        animate={{ opacity: 1 }}
+        className="relative flex w-full flex-col items-center"
       >
-        <div className="flex items-center gap-2.5 mb-4">
-          <Shield className="w-7 h-7 text-sky-300/90" strokeWidth={1.6} />
-          <span className="text-3xl font-semibold tracking-tight text-white" style={{ fontFamily: "Manrope, sans-serif" }}>
-            ResiliAI
-          </span>
-        </div>
-        <motion.p
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.6 }}
-          className="text-[13px] tracking-[0.2em] text-white/45 uppercase"
+        <motion.div
+          className="relative w-[min(30vw,30vh,320px)] aspect-square"
+          aria-label="ResiliAI logo"
+          initial={{ scale: 1 }}
+          animate={{ scale: [1, 0.9, 1.05, 1] }}
+          transition={{ delay: 1.72, duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
         >
-          AI for safer, stronger communities
-        </motion.p>
-        <motion.p
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.95, duration: 0.6 }}
-          className="mt-3 text-sm text-sky-200/70"
+          {[
+            { className: "left-0 top-0", x: -320, y: -260, rotate: -28 },
+            { className: "right-0 top-0", x: 320, y: -260, rotate: 28 },
+            { className: "left-0 bottom-0", x: -320, y: 260, rotate: 28 },
+            { className: "right-0 bottom-0", x: 320, y: 260, rotate: -28 },
+          ].map((piece) => (
+            <motion.div
+              key={piece.className}
+              className={`absolute z-10 h-1/2 w-1/2 overflow-hidden ${piece.className}`}
+              initial={{ x: piece.x, y: piece.y, rotate: piece.rotate, scale: 0.7, opacity: 0 }}
+              animate={{
+                x: [piece.x, piece.x * 0.38, 0],
+                y: [piece.y, piece.y * 0.38, 0],
+                rotate: [piece.rotate, piece.rotate * 0.2, 0],
+                scale: [0.7, 0.88, 1],
+                opacity: [0, 1, 1],
+              }}
+              transition={{ delay: 1.08, duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <img
+                src="/resiliai-symbol.svg"
+                alt=""
+                className={`absolute h-[200%] w-[200%] max-w-none invert ${piece.className.includes("right") ? "right-0" : "left-0"} ${piece.className.includes("bottom") ? "bottom-0" : "top-0"}`}
+              />
+            </motion.div>
+          ))}
+          <motion.span
+            className="pointer-events-none absolute left-1/2 top-1/2 z-30 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: [0, 0.6, 0], scale: [0, 1, 11] }}
+            transition={{ delay: 2.22, duration: 0.34, ease: "easeOut" }}
+            style={{ boxShadow: "0 0 22px 7px rgba(245,250,255,0.3)" }}
+          />
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 2.42, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-[10px] text-[clamp(1rem,3.75vw,2.1rem)] font-black leading-none text-white"
+          style={{ fontFamily: "'Times New Roman', Times, serif" }}
         >
-          Predict. Prepare. Protect.
-        </motion.p>
+          RESILI AI
+        </motion.div>
       </motion.div>
     </motion.div>
   );
@@ -225,11 +333,18 @@ function Navbar({ active, setActive, demoMode, setDemoMode, alertCount }) {
   return (
     <>
       <div className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#080B12]/70 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-5">
           <div className="flex items-center gap-2.5 shrink-0">
-            <Shield className="w-5 h-5 text-sky-300/90" strokeWidth={1.7} />
-            <span className="text-[17px] font-semibold tracking-tight text-white" style={{ fontFamily: "Manrope, sans-serif" }}>
-              ResiliAI
+            <motion.img
+              src="/resiliai-symbol.svg"
+              alt="ResiliAI logo"
+              className="h-10 w-10 object-contain invert"
+              initial={{ rotate: -8, scale: 0.92 }}
+              animate={{ rotate: 0, scale: 1 }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            />
+            <span className="text-[19px] font-semibold tracking-tight text-white" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+              RESILI AI
             </span>
           </div>
 
@@ -238,8 +353,8 @@ function Navbar({ active, setActive, demoMode, setDemoMode, alertCount }) {
               <button
                 key={n.id}
                 onClick={() => setActive(n.id)}
-                className={cx(
-                  "relative px-3.5 py-2 text-[13px] font-medium rounded-lg transition-colors",
+                  className={cx(
+                    "relative px-4 py-2.5 text-[14px] font-medium rounded-lg transition-colors",
                   active === n.id ? "text-white" : "text-white/50 hover:text-white/80"
                 )}
               >
@@ -392,7 +507,7 @@ function Overview({ globalRisk, weather, onNavigate, onSelectZone }) {
               <AlertTriangle className="w-4 h-4" style={{ color: RISK[level].color }} />
             </motion.span>
             <p className="text-[13px] text-white/80">
-              <span className="font-medium" style={{ color: RISK[level].color }}>Critical flood risk in Wakad.</span>{" "}
+              <span className="font-medium" style={{ color: RISK[level].color }}>Critical rainfall risk in Lonavala.</span>{" "}
               Estimated risk has risen to {Math.round(globalRisk)}% due to heavy rainfall.
             </p>
           </div>
@@ -480,17 +595,17 @@ function Overview({ globalRisk, weather, onNavigate, onSelectZone }) {
    RISK MAP PAGE
 --------------------------------------------------------------------- */
 function RiskMapPage({ zones, selected, setSelected }) {
-  const [layer, setLayer] = useState("flood");
+  const [layer, setLayer] = useState("rainfall");
   const active = zones.find((z) => z.id === selected) || null;
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white" style={{ fontFamily: "Manrope, sans-serif" }}>Hyperlocal disaster risk map</h2>
-          <p className="text-[13px] text-white/40 mt-0.5">Click a zone to see detailed risk data.</p>
+          <h2 className="text-xl font-semibold text-white" style={{ fontFamily: "Manrope, sans-serif" }}>Pune rainfall risk map</h2>
+          <p className="text-[13px] text-white/40 mt-0.5">Pune region - Lonavala corridor - Click a zone for details.</p>
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          {[["flood", "Flood risk"], ["rainfall", "Rainfall"], ["vulnerability", "Vulnerability"], ["reports", "Community reports"]].map(([id, label]) => (
+              {[["rainfall", "Rainfall risk"], ["flood", "Flood risk"], ["vulnerability", "Vulnerability"], ["reports", "Community reports"]].map(([id, label]) => (
             <button key={id} onClick={() => setLayer(id)}
               className={cx("px-3 py-1.5 rounded-lg text-[12px] border transition-colors",
                 layer === id ? "bg-sky-400/15 border-sky-400/40 text-sky-200" : "border-white/10 text-white/45 hover:text-white/75")}>
@@ -502,17 +617,31 @@ function RiskMapPage({ zones, selected, setSelected }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <GlassPanel className="lg:col-span-2 p-4 relative overflow-hidden">
-          <svg viewBox="0 0 560 380" className="w-full h-[420px]">
+          <svg viewBox="0 0 560 380" className="w-full h-[420px]" role="img" aria-label="Pune rainfall risk map">
             <defs>
               <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
                 <path d="M28 0H0V28" fill="none" stroke="rgba(255,255,255,0.045)" strokeWidth="1" />
               </pattern>
+              <linearGradient id="mapLand" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#12202a" />
+                <stop offset="100%" stopColor="#0b141d" />
+              </linearGradient>
             </defs>
-            <rect width="560" height="380" fill="url(#grid)" />
+            <rect width="560" height="380" rx="18" fill="url(#mapLand)" />
+            <path d="M82 42 C142 20 218 34 270 70 C327 109 370 99 421 130 C477 164 493 231 466 290 C430 349 337 350 278 325 C221 301 175 323 120 288 C65 252 47 175 58 111 C64 77 68 54 82 42Z" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
+            <path d="M56 255 C151 222 214 232 284 205 C354 178 409 139 506 111" fill="none" stroke="rgba(56,189,248,0.24)" strokeWidth="8" strokeLinecap="round" />
+            <path d="M75 96 C170 141 221 136 302 145 C381 153 414 198 489 229" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2" strokeDasharray="8 7" />
+            <path d="M145 42 C179 116 176 188 211 259 C230 298 270 326 306 350 M387 52 C350 112 330 174 344 232 C351 267 373 296 414 326" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="2" />
+            <rect width="560" height="380" fill="url(#grid)" opacity="0.55" />
+            <text x="280" y="54" textAnchor="middle" fill="rgba(255,255,255,0.88)" fontSize="18" fontWeight="700" letterSpacing="3">PUNE REGION</text>
+            <text x="440" y="304" fill="rgba(255,255,255,0.5)" fontSize="12">LONAVALA</text>
+            <text x="440" y="320" fill="rgba(255,255,255,0.28)" fontSize="10">Western Ghats</text>
+            <circle cx="425" cy="292" r="5" fill="#E4574F" opacity="0.85" />
             {zones.map((z) => {
               const lvl = riskFromScore(z.baseRisk);
               const isActive = selected === z.id;
-              const radius = layer === "reports" ? 16 + z.reports / 2 : 24 + z.baseRisk / 4;
+              const metric = layer === "rainfall" ? z.rainfall : layer === "vulnerability" ? z.vulnerability : layer === "reports" ? z.reports * 4 : z.baseRisk;
+              const radius = layer === "reports" ? 16 + z.reports / 2 : 18 + metric / 5;
               return (
                 <g key={z.id} className="cursor-pointer" onClick={() => setSelected(z.id)}>
                   <motion.circle
@@ -952,7 +1081,7 @@ export default function ResiliAI() {
   const [zones, setZones] = useState(ZONES);
   const [weather, setWeather] = useState({ rainfall: 72, humidity: 84, incidents: 17 });
 
-  const globalRisk = demoMode ? DEMO_STEPS[demoStep].risk : Math.max(...zones.map((z) => z.baseRisk));
+  const globalRisk = demoMode ? DEMO_STEPS[demoStep].risk : 24;
 
   useEffect(() => {
     if (!demoMode) { setZones(ZONES); setWeather({ rainfall: 72, humidity: 84, incidents: 17 }); return; }
